@@ -1074,8 +1074,96 @@ kernel.perf_event_paranoid = 2
 ### 13.9.3　スタックウォーク
 
 ## 13.10　perf report	
+- perf.dataファイルの内容を要約して表示
+- コマンドオプション
+  - --tui: TUI（テキストユーザーインターフェイスを使う）、デフォルト
+  - --stdio: テキストレポートを出力
+  - -i _file_: 入力ファイルを指定
+  - -n: サンプル数の欄を追加
+  - -g _options_: コールグラフ（スタックトレース）表示オプションを変更
+- perf.dataのサマリー（集計）は外部ツールでも作成可能
+  - 「13.11 perf script」で説明する`perf script`の出力を処理する場合も
+
 ### 13.10.1　TUI
+- 例：30秒間に渡って99Hzで命令ポインタのCPUプロファイリングをしてTUIを立ち上げ
+```
+# perf record -F 99 -a -- sleep 30
+[ perf record: Woken up 1 times to write data ]
+[ perf record: Captured and wrote 1.124 MB perf.data (20773 samples) ]
+
+# perf report
+Samples: 20K of event 'cpu-clock:pppH', Event count (approx.): 209828280730
+Overhead  Command  Shared Object      Symbol
+  99.54%  swapper  [kernel.kallsyms]  [k] do_idle
+   0.12%  swapper  [kernel.kallsyms]  [k] __do_softirq
+   0.05%  swapper  [kernel.kallsyms]  [k] finish_task_switch.isra.0
+   0.02%  swapper  [kernel.kallsyms]  [k] default_idle_call
+   0.02%  swapper  [kernel.kallsyms]  [k] preempt_count_sub
+   0.01%  swapper  [unknown]          [.] 0x0000aaaaea6ff8c4
+   0.01%  swapper  [unknown]          [.] 0x0000aaaaea700e30
+   0.01%  swapper  [unknown]          [.] 0x0000aaaaea764608
+   0.00%  swapper  [kernel.kallsyms]  [k] __arch_copy_from_user
+   0.00%  swapper  [kernel.kallsyms]  [k] __rseq_handle_notify_resume
+   0.00%  swapper  [kernel.kallsyms]  [k] _nohz_idle_balance.isra.0
+   0.00%  swapper  [kernel.kallsyms]  [k] do_el0_svc
+   0.00%  swapper  [kernel.kallsyms]  [k] futex_wait_queue
+   0.00%  swapper  [kernel.kallsyms]  [k] futex_wake_mark
+   0.00%  swapper  [kernel.kallsyms]  [k] get_futex_key
+   0.00%  swapper  [kernel.kallsyms]  [k] kmem_cache_free
+   0.00%  swapper  [kernel.kallsyms]  [k] ovl_path_real
+   0.00%  swapper  [kernel.kallsyms]  [k] run_rebalance_domains
+   0.00%  swapper  [kernel.kallsyms]  [k] seq_puts
+   0.00%  swapper  [kernel.kallsyms]  [k] start_xmit
+   0.00%  swapper  [kernel.kallsyms]  [k] update_blocked_averages
+   （以下略）
+```
+- 詳しく表示したい関数やスレッドを選択してデータ内を移動できる対話的なインターフェイス  
+    <img src="image/13-10-tui.png" width="400px">
+
 ### 13.10.2　STDIO
+- 対話的ではない
+- ファイルにリダイレクトして全体のサマリーをテキスト形式で保存したいときに適している
+- 例：スタックトレース(-g)を含むCPUプロファイル
+  - スタックトレースサンプルが階層構造になるようにマージ
+  - 左がルート関数、右に向かって子関数（caller形式）⇔ callee形式（-g calleeで指定、Linux4.4以前はこちらがデフォルト） 
+```
+# perf record -F 99 -a -g -- sleep 30
+[ perf record: Woken up 8 times to write data ]
+[ perf record: Captured and wrote 2.215 MB perf.data (21706 samples) ]
+
+# perf report --stdio
+# To display the perf.data header info, please use --header/--header-only options.
+#
+#
+# Total Lost Samples: 0
+#
+# Samples: 21K of event 'cpu-clock:pppH'
+# Event count (approx.): 219252523060
+#
+# Children      Self  Command  Shared Object      Symbol
+# ........  ........  .......  .................  ........................................
+#
+    99.63%     0.00%  swapper  [kernel.kallsyms]  [k] cpu_startup_entry
+            |
+            ---cpu_startup_entry
+               do_idle
+
+    99.63%    99.47%  swapper  [kernel.kallsyms]  [k] do_idle
+            |
+            |--88.38%--__secondary_switched
+            |          secondary_start_kernel
+            |          cpu_startup_entry
+            |          do_idle
+            |
+             --11.09%--__primary_switched
+                       start_kernel
+                       arch_call_rest_init
+                       rest_init
+                       cpu_startup_entry
+                       do_idle
+    (以下略)
+```
+
 
 ## 13.11　perf script	
 - perf scriptとは

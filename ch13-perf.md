@@ -1081,8 +1081,39 @@ kernel.perf_event_paranoid = 2
 ### 13.11.1　フレームグラフ
 ### 13.11.2　トレーススクリプト
 
-## 13.12　perf trace	
+## 13.12　perf trace
+- デフォルトでシステムコールをトレースし、ライブで出力を表示（perf.dataファイルを作らない）
+- 「5章 アプリケーション」の「5.5.1.3 システムコールのトレーシング」でstrace(1)の軽量版として紹介
+- `perf trace`は`perf record`と同じような構文で任意のイベントを調査することもできる
+  - 例：ディスクI/O要求の発行と完了をトレース
+    ```
+    # perf trace -e block:block_rq_issue,block:block_rq_complete
+        0.000 :0/0 block:block_rq_issue(dev: 266338304, sector: 59244552, nr_sector: 56, bytes: 28672, rwbs: "WS", comm: "jbd2/vda1-8", cmd: "")
+    18446744073709.527 :0/0 block:block_rq_issue(dev: 266338304, sector: 113019168, nr_sector: 8, bytes: 4096, rwbs: "W", comm: "kworker/u16:0", cmd: "")
+        1.042 :0/0 block:block_rq_complete(dev: 266338304, sector: 113019168, nr_sector: 8, rwbs: "W", cmd: "")
+        1.057 :0/0 block:block_rq_complete(dev: 266338304, sector: 59244552, nr_sector: 56, rwbs: "WS", cmd: "")
+        1.079 :0/0 block:block_rq_issue(dev: 266338304, rwbs: "FF", comm: "kworker/0:1H", cmd: "")
+        1.439 :0/0 block:block_rq_complete(dev: 266338304, sector: -1, rwbs: "FF", cmd: "")
+        1.454 :0/0 block:block_rq_issue(dev: 266338304, sector: 59244608, nr_sector: 8, bytes: 4096, rwbs: "WS", comm: "kworker/0:1H", cmd: "")
+        (省略)
+    ```
+- イベントのフィルタも使用可能
+  - カーネルヘッダーの文字列定数も可
+  - 例："SHARED"を指定するとフラグがMAP_SHAREDのmmap(2)をトレース（prot:READを指定して読みやすくしている=beautification）
+    ```
+    # perf trace -e syscalls: *enter_mmap --filter='flags==SHARED'
+        0.000 env/14780 syscalls:sys_enter_mmap(len: 27002, prot: READ, flags: SHARED, fd: 3)
+        16.145 grep/14787 syscalls:sys_enter_mmap(len: 27002, prot: READ, flags: SHARED, fd: 3)
+        18.704 cut/14791 syscalls:sys_enter_mmap(len: 27002, prot: READ, flags: SHARED, fd: 3)
+        [...]
+    ```
+
 ### 13.12.1　カーネルのバージョンによる違い
+- Linux4.19以前の`perf trace`は指定されたイベント(-e)に加えて、デフォルトで全てのシステムコールをインストルメンテーションしていた
+  - 他のシステムコールのトレーシングを無効にするためには`--no-syscalls`を指定する必要があった（現在はこちらがデフォルト）
+  - 例：`perf trace -e block:block_rq_issue,block:block_rq_complete --no-syscalls`
+- 全てのCPUトレース(-a)はLinux3.8からデフォルト
+- フィルタ(--filter)はLinux5.5で追加
 
 ## 13.13　その他のコマンド	
 - perf(1)のその他のコマンド

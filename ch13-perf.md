@@ -974,6 +974,57 @@ kernel.perf_event_paranoid = 2
 ```
 
 ## 13.5　ソフトウェアイベント	
+- ソフトウェアイベントは一般にハードウェアイベントにマッピングされるが、ソフトウェアでインストルメンテーションされる
+- `record`サブコマンドを使う場合、デフォルトサンプリング率(4000)があり、サブセットだけがサンプリング
+- context-switchesソフトウェアイベントとそのトレースポイントの違いに注意
+  - ソフトウェアイベント
+    - 周波数サンプリングは4000Hz
+    - `-c 1`を指定するとソフトウェアイベントでもトレースポイントと同じ
+  ```
+  # perf record -vve context-switches -a -- sleep 1
+  nr_cblocks: 0
+  affinity: SYS
+  mmap flush: 1
+  comp level: 0
+  maps__set_modules_path_dir: cannot open /lib/modules/6.5.11-linuxkit dir
+  Problems setting modules path maps, continuing anyway...
+  ------------------------------------------------------------
+  perf_event_attr:
+    type                             1
+    size                             128
+    config                           0x3
+    { sample_period, sample_freq }   4000
+    sample_type                      IP|TID|TIME|ID|CPU|PERIOD
+    read_format                      ID
+    disabled                         1
+    inherit                          1
+    freq                             1
+  （省略）
+  [ perf record: Captured and wrote 0.019 MB perf.data (152 samples) ]
+  ```
+  - トレースポイント
+    - 周期指定のサンプリング(freq 1なし)
+    - サンプリング周期は1(-c 1を指定したのと同じ)
+  ```
+  # perf record -vve sched:sched_switch -a sleep 1
+  nr_cblocks: 0
+  affinity: SYS
+  mmap flush: 1
+  comp level: 0
+  maps__set_modules_path_dir: cannot open /lib/modules/6.5.11-linuxkit dir
+  Problems setting modules path maps, continuing anyway...
+  ------------------------------------------------------------
+  perf_event_attr:
+    type                             2
+    size                             128
+    config                           0xe1
+    { sample_period, sample_freq }   1
+    sample_type                      IP|TID|TIME|CPU|PERIOD|RAW|IDENTIFIER
+  （省略）
+  [ perf record: Captured and wrote 0.255 MB perf.data (2003 samples) ]
+  ```
+- 全てのイベントを記録するときはデータ量とオーバーヘッドに注意
+  - イベントの発生頻度は`perf stat`を使うとわかる
 
 ## 13.6　トレースポイントイベント	
 

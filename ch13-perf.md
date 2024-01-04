@@ -896,6 +896,27 @@ Internal error: Invalid -1 error code
 ```
 
 ## 13.3　perfイベント	
+- イベントのリストの表示
+  - `perf list`コマンド
+  - 下記はLinux5.8（環境による）
+<img src="image/13-3-perf-list-1.png" width="400px">
+<img src="image/13-3-perf-list-2.png" width="400px">
+- イベントタイプ
+  - Hardware event: 主としてプロセッサのイベント（PMCで実装）
+  - Software event: カーネルカウンタのイベント
+  - Hardware cache event: プロセッサキャッシュのイベント（PMC）
+  - Kerfnel PMU event: PMU（Performance Monitoring Unit）のイベント（PMC）
+  - cache, floating point...: プロセッサベンダーのイベント（PMC）と簡単な説明
+  - Raw hardware event descriptor: 内部コードで指定されたPMC
+  - Hardware breakpoint: プロセッサブレークポイントのイベント
+  - Tracepoint event: カーネルの静的命令イベント
+  - SDT event: ユーザレベルの静的命令イベント（USDT:User-Level Statically Defined Tracing）
+  - pfm-events: [libpfm](https://man7.org/linux/man-pages/man3/libpfm.3.html)イベント（Linux5.8で追加）
+- リスト表示のオプション
+  - 引数として検索対象の部分文字列を受付
+    - 全てHWイベント
+    - Precise eventはPEBS(precise event-based sampling)
+<img src="image/13-3-perf-list-option.png" width="400px">
 
 ## 13.4　ハードウェアイベント	
 ### 13.4.1　周波数サンプリング

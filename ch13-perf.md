@@ -1057,9 +1057,177 @@ kernel.perf_event_paranoid = 2
   - `perf list`はkprobeを含む初期化済みのプローブイベントを"Tracepoint event"と表示する
 
 ## 13.7　プローブイベント	
+- perf(1)はkprobe、uprobe、USDTプローブをまとめて**プローブイベント**と呼ぶ
+- 「動的」なため、まず初期化しなければトレースできない
+- デフォルトでは`perf list`の出力に含まれない（一部のUSDTプローブは自動的に初期化されるため含まれる）
+- 初期化後は"Tracepoint event"と表示
+
 ### 13.7.1　kprobe
+- 「4章 可観測性ツール」の「4.3.6 kprobe」で説明
+- 例：do_nanosleep()カーネル関数をインストルメンテーション
+  - プローブを作成
+    - %retrunを追加すれば関数からのリターンをリターンをインストルメンテーションできる
+  ```
+  # perf probe --add do_nanosleep
+  Added new event:
+    probe:do_nanosleep   (on do_nanosleep)
+
+  You can now use it in all perf tools, such as:
+
+    perf record -e probe:do_nanosleep -aR sleep 1
+  ```
+  - 記録
+  ```
+  # perf record -e probe:do_nanosleep -a sleep 5
+  [ perf record: Woken up 1 times to write data ]
+  [ perf record: Captured and wrote 0.070 MB perf.data (779 samples) ]
+  ```
+  - 出力
+    - トレース中に発生したdo_nanosleep()呼び出しがどこからのものかを示す
+    - 最初はperf(1)が実行したsleep(1)コマンド
+    - ※ 書籍ではその後にSendControllerTからの呼び出しが続く
+  ```
+  # perf script
+  swapper     0 [001] 12649.535005: probe:do_nanosleep: (ffffd79f47f67f08)
+    sleep   207 [005] 12649.535364: probe:do_nanosleep: (ffffd79f47f67f08)
+  swapper     0 [001] 12649.541840: probe:do_nanosleep: (ffffd79f47f67f08)
+  (省略)
+  ```
+  - プローブを削除
+  ```
+  # perf probe --del do_nanosleep
+  Removed event: probe:do_nanosleep
+  ```
+
+#### 13.7.1.1 引数のkprobe
+カーネル関数の引数をインストルメンテーションする方法は少なくとも4種類
+1. カーネルのdebuginfoがある場合
+   - perf(1)は関数の引数を含む変数についての情報を取得できる
+   - --varsオプションを使用
+     - modeとtがdo_nanosleep()の引数
+    ```
+    # perf probe --vars do_nanosleep
+    Avaiable variables at do_nanosleep
+          @<do_nanosleep+0>
+                  enum hrtimer_mode       mode
+                  struct hrtimer_sleeper* t
+    ```  
+   - プローブを作成する際に引数を追加
+    ```
+    # perf probe 'do_nanosleep mode'
+    [...]
+    # perf record -e probe:do_nanosleep -a
+    [...]
+    # perf script 
+              svscan 1470 [012] 4731125.216396: probe:do_nanosleep: (ffffffffa8e4e440)
+    mode=0x1
+    ```
+
+2. カーネルのdebuginfoがない場合（本番環境ではよくある）
+   - レジスタから引数を読み出す
+   - 参照システムで-n(ドライラン)、-v(出力情報増)オプションを指定して`perf probe`を実行すると、引数がセットされるレジスタがわかる
+     - 同じシステム（HWとカーネルが同じ）を使って、カーネルのdebuginfoをインストール
+     - ドライランのためイベントは作られない
+     - %siレジスタで32ビット16進数(x32)という形で表示
+    ```
+    # perf probe -nv 'do_nanosleep mode'
+    [...]
+    Writing event: p:probe/do_nanosleep _text+10806336 mode=%si:x32
+    [...]
+    ```
+   - debuginfoなしのシステムで使用
+    ```
+    # perf probe 'do_nanosleep mode=%si:x32'
+    [...]
+    # perf record -e probe:do_nanosleep -a
+    [...]
+    # perf script
+              svscan 1470 [000] 4732120.231245: probe:do_nanosleep: (ffffffffa8e4e440)
+      mode=0x1
+    ```
+   - この方法が使えるのは二つのシステムが同じプロセッサABI(アプリケーションバイナリインターフェイス)を持ち、同じバージョンのカーネルを使っているときだけ
+3. プロセッサのABIがわかっている場合
+   - ABIからどのレジスタが使われるかがわかる
+   - 13.7.2でuprobeでこの方法を使う例
+4. BTF(BPF type format)が使える場合
+   - カーネルデバッグ情報の新しいソース
+   - デフォルトで使えるように"なりそう"であり、将来のdebuginfoの代替ソースになりそう
+
 ### 13.7.2　uprobe
+- 「4章 可観測性ツール」の「4.3.7 uprobe」で説明
+- kprobeと同様にperf(1)で作成可能
+- 例：libcのファイルオープン関数fopen(3)のuprobeを作成
+  - -xを使ってlibcバイナリのパスを指定
+  ```
+  # perf probe -x/lib/x86-64-linux-gnu/libc.so.6 --add fopen
+  Added new event:
+    probe_libc: fopen (on fopen in /lib/x86-64-linux-gnu/libc-2.27.so) 
+  You can now use it in all perf tools, such as:
+
+    perf record -e probe_libc: fopen -aR sleep 1
+  ```
+- 作ったuprobeはperf recordで使えばイベントを記録可能（不要になったら--delで削除）
+  ```
+  # perf probe del probe_libc:fopen 
+  Removed event: probe_libc: fopen
+  ```
+- %returnを追加すれば関数からのリターンをインストルメンテーションできる
+  - `perf probe -x /lib/x86_64-linux-gnu/libc.so.6 --add fopen%return`
+
+#### 13.7.2.1 引数のuprobe
+- システムにターゲットバイナリのdebuginfoがあれば引数を含む変数についての情報を入手できる
+- 変数のリストは--varsオプションで調べられる
+  - 例：fopen(3)がfilenameとmodeの二つの変数を持っている
+  ```
+  # perf probe/x86-64-linux-gnu/libc.so.6 --vars fopen 
+  Available at fopen
+    @<_IO_vfscanf+15344>
+            char* filename
+            char* node
+  ```
+  - 例：プローブを作るときに追加
+    - `perf probe -x /lib/x86_64-linux-gnu/libc.so.6 --add 'fopen filename mode'`
+- debuginfo
+  - -dbg、-dbgsymパッケージから与えられる
+  - ターゲットシステムにはdebuginfoがない場合
+    - kprobeと同様にdebuginfoがあるシステムが別にあれば参照システムで使うことができる
+  - どこにもない場合の対応
+    - debuginfo付きでソフトウェアを再コンパイルする（OSSであれば）
+    - プロセッサのABIからどのレジスタが使われるかを調べる
+    - 例：x86_64の場合
+      - filename=: 出力で使われる別名("filename"を定義)
+      - %di, %si: X86_64で最初の2個の関数引数が格納されるレジスタとしてAMD64 ABIが限定しているもの
+      - +0(...): オフセット0の内容を間接参照する。これがなければアドレスの内容を文字列で表示するのではなく、アドレスを文字列で表示してしまう
+      - :string: コロンの前のものを文字列形式で表ぞ
+      - :u8: コロンの前のものを符号なし8ビット整数形式で表示
+  <img src="image/13-7-2-x86.png" width="500px">
+    - 構文の詳細はperf-probe(1)のmanページでドキュメント
+- uprobeを使えばアプリケーションの内部を見ることができるが、ソフトウェアのバージョンが異なれば変わる可能性のあるバイナリを直接インストルメンテーションしているため、インタフェースとしては不安定
+- → USDTプローブがあればそちらを使う
+
 ### 13.7.3　USDT
+- USDTとは
+  - 「4章 可観測性ツール」の「4.3.8 USDT」で説明
+  - イベントをトレースするための安定したインtなーフェイスを提供
+- 使い方
+  - USDTプローブ付きバイナリがあればperf(1)のbuildid-cacheサブコマンドを実行
+  - その後のperf(1)はUSDTプローブを認識できるようになる
+    - この時点でのUSDTプローブはSDTイベント、すなわちプログラムの命令テキストにおけるイベントの位置を記述するメタデータ
+```
+# perf buildid-cache --add $(which node)
+
+# perf list | grep sot node
+sdt node:gc__done                 [SDT event]
+sdt node:gc start                 [SDT event]
+sat node http__client__request    [SDT event]
+sdt node:http__client__response   [SDT event]
+sdt node:http__server__request    [SDT event]
+sdt node:http__server__response   [SDT event]
+sdt node:net__server__connection  [SDT event]
+sdt node:net__stream__end         [SDT event]
+```
+  - 実際にUSDTプローブをインストルメンテーションするには、イベントを作成する（uprobeを使う）
+  <img src="img/../image/13-7-3-1.png" width="600px">
 
 ## 13.8　perf stat
 - perf statとは
@@ -1539,6 +1707,7 @@ Check "PERF_EXEC_PATH" env to set scripts dir.
 ## 実験環境
 - Ubuntuコンテナ on M1 MacOS
   - Ubuntu 22.04.3 LTS
+  - 6.5.11-linuxkit
   - **セキュリティのリスクがあるがコンテナでperfを使うために特権コンテナとした(あくまでも実験用とする)**
 ```bash
 docker run --privileged -it --name perf_exec ubuntu

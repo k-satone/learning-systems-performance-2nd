@@ -919,7 +919,59 @@ Internal error: Invalid -1 error code
 <img src="image/13-3-perf-list-option.png" width="400px">
 
 ## 13.4　ハードウェアイベント	
+- 「4章 可観測性ツール」の「4.3.9 ハードウェアカウンタ（PMC）」で説明
+- プロセッサ固有のコードを使って構成されたPMC（Performance Monitoring Counter）を使って実装
+  - Intelプロセッサの分岐命令は`r00c4`を指定
+  - 覚える必要はなく、必要になった時にプロセッサのマニュアルで調べる → perf(1)は可読名を用意している
+  - 高度な領域になると可読名ではなく内部イベントディスクリプタを使う必要も
+
 ### 13.4.1　周波数サンプリング
+- PMCを対象として`perf record`を使う場合、全てのイベントを記録しないようにデフォルトサンプリング率を使用
+- 例：cycleイベント
+  - 周波数サンプリングが有効（freq 1）
+  - サンプリング率({ sample_period, sample_freq }   4000)
+```
+# perf record -vve cycles -a sleep 1
+nr_cblocks: 0
+affinity: SYS
+mmap flush: 1
+comp level: 0
+maps__set_modules_path_dir: cannot open /lib/modules/6.5.11-linuxkit dir
+Problems setting modules path maps, continuing anyway...
+------------------------------------------------------------
+perf_event_attr:
+  size                             128
+  { sample_period, sample_freq }   4000
+  sample_type                      IP|TID|TIME|ID|CPU|PERIOD
+  read_format                      ID
+  disabled                         1
+  inherit                          1
+  freq                             1
+(省略)
+[ perf record: Captured and wrote 0.258 MB perf.data (4569 samples) ]
+```
+- PMCイベントでは1秒間に数十億回も発生するもの(CPUサイクルなど)があり、全てのイベントを記録すると法外なオーバーヘッド
+  - カーネルが自らを守るために自分でもサンプリング率を落としてイベントを捨てるはず
+  - `perf report -D | tail -20`でサマリーカウンタをチェックして失われたイベントがあるか確認
+- 使用上の注意
+  - デフォルトの出力(very verbose: -vvなし)では、周波数サンプリングが使用されていることはわからない
+  - 周波数サンプリングは`record`サブコマンドだけに適用され、`stat`サブコマンドでは全てのイベントをカウント
+- 設定方法
+  - -F：サンプリング率の指定
+    - 例：99Hzにサンプリング `perf record -F 99 -e cycles -a sleep 1`
+  - -c：周期での指定（その周期ごとに一つのイベントをサンプリング）=オーバーフローサンプリング
+  - 上限あり
+    - 周波数：perf_event_max_sample_rate
+    - CPU使用率(PMU割り込み)：perf_cpu_time_max_percent
+```
+# sysctl -a | grep perf
+kernel.perf_cpu_time_max_percent = 25
+kernel.perf_event_max_contexts_per_stack = 8
+kernel.perf_event_max_sample_rate = 100000
+kernel.perf_event_max_stack = 127
+kernel.perf_event_mlock_kb = 516
+kernel.perf_event_paranoid = 2
+```
 
 ## 13.5　ソフトウェアイベント	
 

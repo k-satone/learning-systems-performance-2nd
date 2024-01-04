@@ -956,8 +956,20 @@ Internal error: Invalid -1 error code
 ## 13.13　その他のコマンド	
 
 ## 13.14　perfのドキュメント	
+- manページ
+  - 個々のサブコマンドは先頭に"perf-"をつけたタイトルで独立したmanページを持つ
+    - 例：[perf-record(1)](https://man7.org/linux/man-pages/man1/perf-record.1.html)
+  - Linuxソースツリーのtools/perf/Documentation以下
+- チュートリアル
+  - https://perf.wiki.kernel.org/index.php/Tutorial
+- 非公式perfページ
+  - Weavevr: https://web.eece.maine.edu/~vweaver/projects/perf_events/
+  - Gregg（筆者）: https://www.brendangregg.com/perf.html
+- アップデート
+  - [KernelNewbies](https://kernelnewbies.org/)で公開されるchangelog
 
-## 13.15　参考文献	
+## 13.15　参考文献
+- 省略(書籍を参照)	
 
 ## 実験環境
 - Ubuntuコンテナ on M1 MacOS

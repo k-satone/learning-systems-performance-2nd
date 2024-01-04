@@ -1027,6 +1027,34 @@ kernel.perf_event_paranoid = 2
   - イベントの発生頻度は`perf stat`を使うとわかる
 
 ## 13.6　トレースポイントイベント	
+- 「4章 可観測性ツール」の「4.3.5 トレースポイント」で説明
+- 例：block:block_rq_issueトレースポイント
+  - 10秒に渡ってシステム全体をトレースし、イベントを表示
+  ```
+  # perf record -e block:block_rq_issue -a sleep 10; perf script
+  [ perf record: Woken up 1 times to write data ]
+  [ perf record: Captured and wrote 0.011 MB perf.data (7 samples) ]
+          swapper     0 [006] 11879.392288: block:block_rq_issue: 254,0 W 12288 () 113019136 + 24 [kworker/u16:3]
+          swapper     0 [005] 11879.392438: block:block_rq_issue: 254,0 WS 57344 () 59243216 + 112 [jbd2/vda1-8]
+          swapper     0 [005] 11879.392794: block:block_rq_issue: 254,0 FF 0 () 0 + 0 [kworker/5:1H]
+          swapper     0 [000] 11879.393252: block:block_rq_issue: 254,0 WS 4096 () 59243328 + 8 [kworker/0:1H]
+          swapper     0 [000] 11879.393730: block:block_rq_issue: 254,0 FF 0 () 0 + 0 [kworker/0:1H]
+          swapper     0 [006] 11879.394041: block:block_rq_issue: 254,0 DS 28672 () 113027296 + 56 [kworker/6:1H]
+          swapper     0 [006] 11879.394465: block:block_rq_issue: 254,0 DS 4096 () 109125720 + 8 [kworker/6:1H]
+  ```
+  - このトレースポイントの引数と書式文字列（メタデータサマリー）を表示  
+  🙅‍♀️ debug以下に何も存在しない
+  ```
+  cat /sys/kernel/debug/tracing/events/block/block_rq_issue/format
+  ```
+  - フィルタリングによって65,536バイトよりも大きいブロックI/Oだけをトレース
+  ```
+  # perf record -e block:block_rq_issue --filter 'bytes > 65536' -a sleep 10
+  [ perf record: Woken up 1 times to write data ] 
+  [ perf record: Captured and wrote 0.011 MB perf.data (1 samples) ]
+  ```
+- 注意
+  - `perf list`はkprobeを含む初期化済みのプローブイベントを"Tracepoint event"と表示する
 
 ## 13.7　プローブイベント	
 ### 13.7.1　kprobe

@@ -1213,21 +1213,54 @@ kernel.perf_event_paranoid = 2
   - USDTプローブ付きバイナリがあればperf(1)のbuildid-cacheサブコマンドを実行
   - その後のperf(1)はUSDTプローブを認識できるようになる
     - この時点でのUSDTプローブはSDTイベント、すなわちプログラムの命令テキストにおけるイベントの位置を記述するメタデータ
-```
-# perf buildid-cache --add $(which node)
+    ```
+    # perf buildid-cache --add $(which node)
 
-# perf list | grep sot node
-sdt node:gc__done                 [SDT event]
-sdt node:gc start                 [SDT event]
-sat node http__client__request    [SDT event]
-sdt node:http__client__response   [SDT event]
-sdt node:http__server__request    [SDT event]
-sdt node:http__server__response   [SDT event]
-sdt node:net__server__connection  [SDT event]
-sdt node:net__stream__end         [SDT event]
-```
+    # perf list | grep sot node
+    sdt node:gc__done                 [SDT event]
+    sdt node:gc start                 [SDT event]
+    sat node http__client__request    [SDT event]
+    sdt node:http__client__response   [SDT event]
+    sdt node:http__server__request    [SDT event]
+    sdt node:http__server__response   [SDT event]
+    sdt node:net__server__connection  [SDT event]
+    sdt node:net__stream__end         [SDT event]
+    ```
+
   - 実際にUSDTプローブをインストルメンテーションするには、イベントを作成する（uprobeを使う）
-  <img src="img/../image/13-7-3-1.png" width="600px">
+    - SDT event(USDTメタデータ)としてもTracepoint eventとしても表示される
+
+    ```
+    # perf probe sdt_node:http__server__request
+    Added new event:
+      sdt_node:http__server__request (on %http__server__request in /home/bgregg/Build/node-v12.4.0/out/Release/node)
+
+    You can now use it in all perf tools, such as:
+
+
+        perf record -e sdt node:http__server__request -aR sleep 1
+
+    # perf list | grep http__server__request 
+      sdt_node:http__server__request [Tracepoint event]
+      sdt_node:http__server__request [SDT event]
+    ```
+  - USDTイベントの記録
+    - 記録中にsdt_node:http__server__requestイベントが2回発生
+    ```
+    # perf record -e sdt_node:http__server__request -a
+    ^C[ perf record: Woken up 1 times to write data ]
+      [ perf record: Captured and wrote 3.924 MB perf.data (2 samples) ]
+    # perf script
+          node 16282 [006] 510375.595203: sdt_node:http__server__request: (55c3d8b03530) arg1=140725176825920 arg2=140725176825888 arg3=140725176829208 arg4=39090 arg5=140725176827096 arg6=140725176826040 arg7=20
+          node 16282 [006] 510375.844040: sdt_node:http__server__request: (55c3d8b03530) arg1=140725176825920 arg2=140725176825888 arg3=140725176829208 arg4=39992 arg5=140725176827096 arg6=140725176826040 arg7=20
+    ```
+    - 出力にはUSDTプローブに対する引数も含まれているがその一部は構造体や文字列のため、ポインタアドレスとして表示
+    - → 以下のように適切な方にキャストできるように**すべき**であるが本稿執筆時点ではできない
+      - `perf probe --add 'sdt_node:http__sever__request address=+0(arg3):string'`
+- 課題
+  - 一部のUSDTプローブはプロセスアドレス空間内にセマフォを用意してインクリメントしなければ正しく動作しない（Linux4.20以降で解消）
+    - std_node:http__server__requestもそのようなプローブの一つ
+
 
 ## 13.8　perf stat
 - perf statとは

@@ -1061,12 +1061,137 @@ kernel.perf_event_paranoid = 2
 ### 13.7.2　uprobe
 ### 13.7.3　USDT
 
-## 13.8　perf stat	
+## 13.8　perf stat
+- perf statとは
+  - イベントを数える
+  - イベントの発生頻度を計算したり、イベントが発生有無の確認に使える
+  - ソフトウェアイベントはカーネルのコンテキストで数え、ハードウェアイベントはPMCレジスタを使って顔エル
+  - perf statでイベントの発生頻度をチェックすることで、コストが高いperf recordサブコマンドのオーバーヘッドを見積もれる
+- 例：システム全体で（-a）sched:sched_switchトレースポイントのヒット回数（イベントを指定する-e）を1秒間に渡って数える
+  - 1秒間でトレースポイントに1129回ヒット
+  - 厳密には`--`のセパレータは不要
+  ```
+  # perf stat -e sched:sched_switch -a -- sleep 1
+
+  Performance counter stats for 'system wide':
+
+                1129      sched:sched_switch
+
+        1.007598667 seconds time elapsed
+  ```
+
 ### 13.8.1　オプション
+- コマンドオプション
+  - -a: 全てのCPUで記録（Linux4.11でデフォルト）
+  - -e _event_: 記録するイベントを指定
+  - --filter _filter_: 論理式を返すイベントフィルタ式を設定
+  - -p _PID_: 指定したPIDだけ記録
+  - -t _TID_: 指定したスレッドIDだけ記録
+  - -G _cgroup_: 指定したcgroupだけを記録（コンテナで使用）
+  - -A: CPUごとの数を表示
+  - -I _interval_ms_: インターバル(m秒単位)ごとに出力 
+  - -v: メッセージの量を増やす
+  - -vv: メッセージの量をさらに増やす
+- 指定可能なイベント
+  - トレースポイント
+  - ソフトウェアイベント
+  - ハードウェアイベント
+  - kprobe
+  - uprobe
+  - USDTプローブ
+- ワイルドカードの使用
+  - ファイルグロブスタイル("*"で全て、"?"で1文字にマッチ)で複数のイベントにマッチ
+  - 例：schedタイプの全てのトレースポイント `perf stat -e 'sched:*' -a`
+- 複数のイベント指定
+  - 以下のどちらでも良い
+    ```
+    # perf stat -e 'sched:*' -e 'block:*' -a
+    # perf stat -e 'sched:*,block:*' -a
+    ```
+- イベントを指定しない場合
+  - デフォルトでarchetectural PMCを数える
+  - 「4章 可観測性ツール」の「4.3.9 ハードウェアカウンタ（PMC）」に具体例
+
 ### 13.8.2　インターバルごとの統計
+- -Iオプションを使えばインターバルごとの統計を表示できる
+- 例：1000m秒ごとにsched:sched_switchのヒット数を表示
+  - counts欄：前のインターバル終了後からの数（時間によるばらつきがわかる）
+  - 最後の行：前のインターバルからCtrl+Cを押すまでの回数
+  ```
+  # perf stat -e sched:sched_switch -a -I 1000
+  #           time             counts unit events
+      1.003199584               1077      sched:sched_switch
+      2.008588001               1429      sched:sched_switch
+      3.012612251               1255      sched:sched_switch
+      4.015503543               1201      sched:sched_switch
+      5.022566627               1118      sched:sched_switch
+      6.025264628               1231      sched:sched_switch
+  ^C     6.323108628                400      sched:sched_switch
+  ```
+
 ### 13.8.3　CPU間のバランス
+- -Aオプションを使えばCPU間のバランスを調べられる
+  - 論理CPu別にインターバルごとの差分値が表示
+  ```
+  # perf stat -e sched:sched_switch -a -A -I 1000
+  #           time CPU                    counts unit events
+      1.001903875 CPU0                       36      sched:sched_switch
+      1.001903875 CPU1                       81      sched:sched_switch
+      1.001903875 CPU2                      281      sched:sched_switch
+      1.001903875 CPU3                       36      sched:sched_switch
+  [...]
+  ```
+- CPUソケット、コア集合を指定する--per-socket、--per-coreオプションもある
+  ```
+  # perf stat -e sched:sched_switch -a --per-socket -I 1000
+  #           time socket cpus             counts unit events
+      1.000971376 S0        8               1045      sched:sched_switch
+      2.004771251 S0        8               1198      sched:sched_switch
+      3.007804293 S0        8               1070      sched:sched_switch
+      4.010896877 S0        8               1394      sched:sched_switch
+  ^C     4.718627836 S0        8               1003      sched:sched_switch
+
+  # perf stat -e sched:sched_switch -a --per-core -I 1000
+  #           time core            cpus             counts unit events
+      1.001511292 S0-D0-C0           1                 55      sched:sched_switch
+      1.001511292 S0-D0-C1           1                 27      sched:sched_switch
+      1.001511292 S0-D0-C2           1                 13      sched:sched_switch
+      1.001511292 S0-D0-C3           1                328      sched:sched_switch
+      1.001511292 S0-D0-C4           1                258      sched:sched_switch
+  [...]
+  ```
+
 ### 13.8.4　イベントフィルタ
+- 一部のイベントタイプ（トレースポイント）では、イベント引数をテストする論理式を指定できる
+- イベントは論理式が真になった時に限り数えられる
+- 例：前のPIDが25467の時に限りsched:sched_switchを数える
+  - この環境ではPIDが小さい...
+  ```
+  # perf stat -e sched:sched_switch --filter 'prev_pid == 25467' -a -I 1000
+  #           time             counts unit events
+      1.003403834                  0      sched:sched_switch
+      2.006851543                  0      sched:sched_switch
+      3.011523627                  0      sched:sched_switch
+      4.018634044                  0      sched:sched_switch
+      5.025564170                  0      sched:sched_switch
+  ^C     5.728632753                  0      sched:sched_switch
+  ```
+- 詳しくは「4章 可観測性ツール」の「4.3.5.2 トレースポイントの引数と書式文字列」を参照
+- イベント引数はイベントごとに異なり、`/sys/kernel/debug/tracing/events`のformatファイルに書かれている
+
 ### 13.8.5　シャドウ統計
+- 特定のイベントの組み合わせがインストルメンテーションされた時に限り表示される様々なシャドウ統計がある
+- 例：PMCのcyclesとinstructionsをインストルメンテーションするとサイクルごとに命令数(IPC)が表示
+  - 右側に#記号付きで表示される
+  - 🤔 自分の環境ではシャドウ統計は表示されなかった...
+```
+#perf state cycles, instructions -a
+^C
+Performance counter stats for 'system wide':
+  2,895,806,892 cycles
+  6,452,798,206 instructions            # 2.23 insn per cycle
+    1.840093176 seconds time elapsed
+```
 
 ## 13.9　perf record
 - イベントの記録をファイルに書き込んで後で分析できるようにする

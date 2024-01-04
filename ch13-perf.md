@@ -1078,8 +1078,96 @@ kernel.perf_event_paranoid = 2
 ### 13.10.2　STDIO
 
 ## 13.11　perf script	
+- perf scriptとは
+  - デフォルトでperf.dataからの個々のサンプルを表示
+  - reportのサマリー(集計)では失われてしまう経時的なパターンを見つけるために役立つ
+  - 出力はフレームグラフの作成に使用できる
+  - カスタム形式のイベントの記録、表示を自動化するトレーススクリプト（trae script）を実行することもできる
+- 現在のデフォルトの出力内容(1行目の例)
+  - プロセス名: mysqld
+  - スレッドID: 8631
+  - CPU ID: [000]
+  - タイムスタンプ: 4242944.582702 (秒)
+  - 周期: 10101010 (-F 99による、何らかの形でサンプリングを行った時に表示)
+  - イベント名: cpu-clock:pppH
+  - イベント引数: ここから後（cpu-clockの場合：命令ポインタ、関数名とオフセット、セグメント名）
+    ```
+    # perf script
+    mysqld  8631 [000] 4242944.582702: 10101010 cpu-clock:pppH: c08fd9 _Z19close_thread_tablesP3THD+0x49 (/usr/sbin/mysqld) 
+    mysqld  8619 [001] 4142044.582711: 10101010 cpu-clock:pppH: 79f81d _ZN5Field10make_fieldEP10Send_field+0x1d (/usr/sbin/mysqld) 
+    mysqld 22432 [002] 4142044.582713: 10101010 cpu-clock:pppH: ffffffff95530302 get_futex_key_refs.isra.12+0x32 (/lib/modules/5.4.0-rc8-virtua...)
+    [...]
+    ```
+- 筆者のよく使用するオプション
+  - -Fオプションを使ってフィールドを指定
+  - --headerオプションを指定してperf.dataのメタデータを表示（必要な情報の宝庫）
+    ```
+    # perf script --header -F comm, pid, tid, cpu, time, event, ip, sym, dso, trace
+    # ========
+    # captured on     : Sun Jan 5 23:43:56 2020
+    # header version  : 1
+    # data offset     : 264
+    # data size       : 2393000
+    # feat offset     : 2393264
+    # hostname        : bgregg-mysql
+    # os release      : 5.4.0
+    # pert version    : 5.4.8
+    # arch : x86_64
+    # nrcpus online : 4
+    # nrcpus avail : 4
+    # cpudesc : Intel(R) Xeon(R) Platinum 8175M CPU @ 2.50GHz
+    # cpuid : GenuineIntel, 6,85,4
+    # total memory : 15923672 kB
+    # cmdline : /usr/bin/perf record -F 99-a -g - sleep 30
+    # event : name = cpu-clock: pppH, id { 5997, 5998, 5999, 6000 }, type = 1, size = 112, { sample period, sample freq = 99, sample ty
+    [...]
+    # ========
+    mysqld 21616/8583 [000] 4142769.671581: cpu-clock:pppH:
+                      c36299 [unknown] (/usr/sbin/mysqld)
+                      c3bad4 _ZN13QEP_tmp_table8end_sendEv (/usr/sbin/mysqld) 
+                      c3c1a5 _Z13sub_select_opP4JOINP7QEP_TABb (/usr/sbin/mysqld)
+                      c346a8 _ZN4JOIN4execEv (/usr/sbin/mysqld)
+                      ca735a _Z12handle_queryP3THDP3LEXP12Query_resultyy
+    [...]
+    ```
+
 ### 13.11.1　フレームグラフ
+- スタックトレースを可視化
+- CPUプロファイリングだけでなくperf(1)で収集したあらゆるスタックトレースに使用可能
+  - コンテキストスイッチイベント時のスタックトレース：スレッドがCPUを手放した理由を知るために役立つ
+  - ブロックI/O発生時のスタックトレース：どのコードパスがディスクI/Oを発行したのか知るために役立つ
+- フレームグラフ作成ツール
+  - 筆者のものとd3-flame-graphの2つ
+  - どちらも`perf script`の出力を可視化
+- perf(1)のフレームグラフサポートはLinux5.8で追加
+- その他の可視化ツールとしてFlameScope
+  - フレームグラフと秒未満オフセットヒートマップを組み合わせて時間によるばらつきを調査
+  - 「6章 CPU」の「6.7.4 FlameScope」を参照
+
 ### 13.11.2　トレーススクリプト
+- `-l`オプションを使うと実行できるperf(1)トレーススクリプトのリストが表示
+```
+# perf script -1
+List of available trace scripts:
+[...]
+  event analyzing sample                analyze all perf samples
+  mem-phys-addr                         resolve physical address samples 
+  intel-pt-events                       print Intel PT Power Events and PTWRITE
+  sched-migration                       sched migration overview
+  net_ropmonitor                        display a table of dropped frames
+  syscall-counts-by-pid [comm]          system-wide syscall counts, by pid
+  failed-syscalls-by-pid [comm]         system-wide failed syscalls, by pid
+  export-to-sqlite [database name] [columns] [calls] export perf data to a sqlite3 database
+  stackcollapse                         produce callgraphs in short form for scripting use
+```
+※ 🤔 実行できず...
+```
+# perf script --list
+open(/usr/libexec/perf-core/scripts) failed.
+Check "PERF_EXEC_PATH" env to set scripts dir.
+```
+- これらのトレーススクリプトは`perf script`の引数として実行
+- PerlかPythonで新たなトレーススクリプトを作成可能
 
 ## 13.12　perf trace
 - デフォルトでシステムコールをトレースし、ライブで出力を表示（perf.dataファイルを作らない）

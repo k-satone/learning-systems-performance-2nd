@@ -1085,6 +1085,45 @@ kernel.perf_event_paranoid = 2
 ### 13.12.1　カーネルのバージョンによる違い
 
 ## 13.13　その他のコマンド	
+- perf(1)のその他のコマンド
+  - perf c2c: キャッシュライン偽共有分析（c2c: cache-to-cache）, Linux4.10+
+  - perf kmem: カーネルメモリアロケーション分析
+  - perf kvm: kvm(カーネルベース仮想マシン)ゲストの分析
+  - perf lock: ロック分析
+  - perf mem: メモリアクセス分析
+  - perf sched: カーネルスケジューラ統計
+- その他の高度な機能
+  - イベント発生時のBPFプログラムの実行
+  - Intel Proceessor Trace(PT)やARM CoreSightなどのハードウェアトレーシングを使った命令ごとの分析
+    - 例：Intel Proceessor Trace(PT)
+      - date(1)コマンドのユーザモードサイクルを記録
+      ```
+      # perf record -e intel pt/cyc/u date 
+      Sat Jul 11 05:52:40 PDT 2020
+      [ perf record: Woken up 1 times to write data ]
+      [ perf record: Captured and wrote 8.049 MB perf.data ]
+      ```
+      - 命令トレースとして表示（命令はマシンコードで表示）
+      ```
+      # perf script --insn-trace
+      date 31979 [003] 653971.670163672: 7f3bfbf4d090 start+0x0 (/lib/x86_64-Linux-gnu/ld-2.27.50) insn: 48 89 e7
+      date 31979 [003] 653971.670163672: 7f3bfbf4d093_start+0x3 (/lib/x86_64-Linux-gnu/ld-2.27.so) insn: e8 08 De 00 00 
+      [...]
+      ```
+      - Intel XED(C86 Encoder Decoder)をインストールして表示（命令はアセンブリ言語で表示, 恐ろしく細かい情報）
+      ```
+      # perf script --insn-trace --xed
+      date 31979 [003] 653971.670163672: ... (/lib/x86_64-linux-gnu/ld-2.27.so) mov %rsp, %rdi
+      date 31979 [003] 653971.670163672: ... (/lib/x86_64-linux-gnu/ld-2.27.so) callq 0x7f3bfbf4dea0
+      date 31979 [003] 653971.670163672: ... (/lib/x86-64-linux-gnu/ld-2.27.so) pushq %rbp
+      [...]
+      date 31979 [003] 653971.670439432: ... (/bin/date) xor %ebp, %ebp
+      date 31979 [003] 653971.670439432: ... (/bin/date) mov %rdx, %r9
+      date 31979 [003] 653971.670439432: ... (/bin/date) popq %rsi
+      date 31979 [003] 653971.670439432: ... (/bin/date) mov %rsp, %rdx
+      date 31979 [003] 653971.670439432: ... (/bin/date) and $0xfffffffffffffff0, %rsp
+      [...]
+      ```
 
 ## 13.14　perfのドキュメント	
 - manページ

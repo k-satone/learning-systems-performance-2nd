@@ -901,6 +901,7 @@ Internal error: Invalid -1 error code
   - 下記はLinux5.8（環境による）
 <img src="image/13-3-perf-list-1.png" width="400px">
 <img src="image/13-3-perf-list-2.png" width="400px">
+
 - イベントタイプ
   - Hardware event: 主としてプロセッサのイベント（PMCで実装）
   - Software event: カーネルカウンタのイベント
@@ -916,6 +917,7 @@ Internal error: Invalid -1 error code
   - 引数として検索対象の部分文字列を受付
     - 全てHWイベント
     - Precise eventはPEBS(precise event-based sampling)
+    
 <img src="image/13-3-perf-list-option.png" width="400px">
 
 ## 13.4　ハードウェアイベント	
